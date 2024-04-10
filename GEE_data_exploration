@@ -1,0 +1,261 @@
+//  Playing with GEE Data!
+
+/*  You just recieved a crash course in JavaScript.  Now lets play with some satellite data! 
+    This portion of the lab is meant to introduce you to different types of data available on the
+    GEE, how to map it, filter by date, and understand what is in it. Ultimatly it is meant to get 
+    you thinking about different applications of the GEE to environmental health.  
+    
+    You will not conduct the full analyses to answer these questions, just find data that you could 
+    apply to these questions and explore! */ 
+
+/* ---------------------------------------------------------------------------------
+######################## Prompt 1 ################################
+----------------------------------------------------------------------------------*/
+/*  You want to conduct a study of agricultural burning and acute respiratory disease in 
+    Pakistan. You have residential locations and dates for self-reported symptoms and 
+    lung function during 2020. How can you assign exposure to agricultural burning? */
+
+////Search the GEE Cateloge, what could be useful here?  Hint:search fires
+
+/*  Example data sets tagged with fire:
+    https://developers.google.com/earth-engine/datasets/tags/fire?hl=en 
+    https://developers.google.com/earth-engine/datasets/catalog/FIRMS?hl=en#description 
+    https://developers.google.com/earth-engine/datasets/catalog/MODIS_061_MOD14A1?hl=en*/
+
+// //Step 1: Search the GEE Cateloge, what could be useful here?  Hint:search fires
+// var dataset = ee.ImageCollection('MODIS/061/MOD14A1');
+
+////Sept 2: Once you have found a dataset of interest, restrict to the year 2020
+// var dataset2000 = dataset.filterDate('2020-01-01', '2021-01-01');
+// Map.addLayer(dataset2000, {}, 'test - what is this data?');
+
+////Step 3: Select your band (i.e. variable of interest)
+// var frp = dataset2000.select('MaxFRP');
+
+////Step 4: Calculate the total burning/fire for each pixel location
+// var frp_sum = frp.sum();
+
+////Step5: Map your frp_sum variable for 2022 
+
+//// Create visualization parameters
+// var fireMaskVis = {
+//   min: 29,
+//   max: 2407,
+//   palette: ['green', 'yellow', 'orange', 'red'],
+// };
+
+//// Set Maplocation 
+// Map.setCenter(74.82, 31.05, 8);
+
+////Map frp using the fireMaskVis parameters
+// Map.addLayer(frp_sum, fireMaskVis, 'Sum MaxFRP');
+
+/*  Question - How do you know what min and max values to use?
+    You can query your sum raster only using data within Pakistan */
+
+//// Load country dataset 'FAO/GAUL/2015/level0'
+// var countries = ee.FeatureCollection('FAO/GAUL/2015/level0');
+
+// // Filter the FeatureCollection to subset Pakistan.
+// var pakistan = countries.filter(ee.Filter.eq('ADM0_NAME', 'Pakistan'));
+
+// // Use the Pakistan boundary geometry with the reduceRegion() function.
+// var stats = frp_sum.reduceRegion({
+//   reducer: ee.Reducer.minMax(),
+//   geometry: pakistan.geometry(),
+//   scale: 1000,  // Change this to the resolution of your image
+//   maxPixels: 1e9  // This is to avoid 'too many pixels' error
+// });
+
+// print(stats);
+
+// // Alternatively, you could clip your frp_sum to only include data for Pakitan
+
+// var frp_sum_pakistan = frp_sum.clip(pakistan);
+
+// Map.addLayer(frp_sum_pakistan, fireMaskVis, 'Pakistan Sum MaxFRP');
+
+/*  Can you refine your fire data with more detail on potential agricultural burning?  
+    Hint: Search land cover? */
+
+/*  Example data sets tagged with landcover:
+    https://developers.google.com/earth-engine/datasets/catalog/COPERNICUS_Landcover_100m_Proba-V-C3_Global
+    https://developers.google.com/earth-engine/datasets/catalog/GOOGLE_DYNAMICWORLD_V1 */
+
+// //  Map Copernicus Global Land Cover (discrete classifications);
+// var Copernicus = ee.Image("COPERNICUS/Landcover/100m/Proba-V-C3/Global/2019")
+// .select('discrete_classification');
+
+// Map.addLayer(Copernicus, {}, "Copernicus Land Cover");
+
+// //  Map Dynamic World Land Cover Classifications.  Look at the GEE catelogue to figure out
+// //  what are mapping and how you should summarize;
+// var DW_LC = ee.ImageCollection("GOOGLE/DYNAMICWORLD/V1") 
+//   .filterDate('2020-01-01', '2021-01-01')
+//   .select('label')
+//   .reduce(ee.Reducer.mode());
+  
+// var dwVisParams = {
+//   min: 0,
+//   max: 8,
+//   palette: [
+//     '#419BDF', '#397D49', '#88B053', '#7A87C6', '#E49635', '#DFC35A',
+//     '#C4281B', '#A59B8F', '#B39FE1'
+//   ]
+// };
+
+// Map.addLayer(DW_LC, dwVisParams, "DW_LC Land Cover");
+
+/* ---------------------------------------------------------------------------------
+########################  Prompt 2 ################################
+----------------------------------------------------------------------------------*/
+/*  COVID-19 lock-downs had a major impact on vehicle volumes and air pollutin emissions. 
+    What data could you use to assess changes in NO2 before, during, and after lock downs?  
+    You would like to examine differences by country income class (HIC, MIC and LICs) so you 
+    need a global dataset. */
+    
+/*  Challenge!  If you have experience working in the GEE or JavaScript and are moving fast through
+    the lab, here is a task for you:)  Create a map showing the change in NO2 for March 
+    to June 2020 compared to March to June 2019. */
+    
+// //Step 1: Import sentinel no2 data
+// var SentinelNO2Collection = ee.ImageCollection('COPERNICUS/S5P/NRTI/L3_NO2');
+
+// //Step 2: Select your band (i.e. variable of interest)
+// var no2 = SentinelNO2Collection.select('tropospheric_NO2_column_number_density');
+
+// //Step 3: Create 2 datasets by filtering by date (March-July 2020 compared to March-July 2019)
+// var no2_covid = no2.filterDate('2020-03-01','2020-06-01');
+// var no2_precovid = no2.filterDate('2019-03-01','2019-06-01');
+
+// //Step 4: Calculate the mean NO2 from this image collection (i.e. mean across all satellite pixels March-July 2019/2020)
+// var no2_covid_mean = no2_covid.mean();
+// var no2_precovid_mean = no2_precovid.mean();
+
+// //Step 5: Map the two layers 
+// var band_viz = {
+//   min: 0,
+//   max: 0.0002,
+//   palette: ['black', 'blue', 'purple', 'cyan', 'green', 'yellow', 'red']
+// };
+
+// Map.addLayer(no2_covid_mean, band_viz, 'no2_covid_mean');
+// Map.addLayer(no2_precovid_mean, band_viz, 'no2_precovid_mean');
+
+// //Step 6: Calculate the difference between these two images and rename band no2Change
+// var no2_change = no2_precovid_mean.subtract(no2_covid_mean)
+//                                   .rename('no2Change');
+
+// //Step 7: Map the NO2 change variable
+// var band_viz_change = {
+//   min: 0,
+//   max: 0.00002,
+//   palette: ['black', 'blue', 'purple', 'cyan', 'green', 'yellow', 'red']
+// };
+
+// Map.setCenter(-74.00, 40.71, 6);
+// Map.addLayer(no2_change, band_viz_change, 'no2_change covid');
+
+// //What about countries to examine change by HIC, MIC and LIC?
+// var countries = ee.FeatureCollection("FAO/GAUL_SIMPLIFIED_500m/2015/level0");
+// Map.addLayer(countries, null, 'countries');
+
+/* ---------------------------------------------------------------------------------
+########################  Prompt 3 ################################
+-----------------------------------------------------------------------------------*/
+/*  Access to healthcare is a primary driver of health and wellbeing.  
+You want to identify locations in the world that do not have access to healthcare
+facilities within a 60 minute travel time. In addition, you want to identify locations
+where individuals actually live!  
+
+Hint: Search healthcare and population density in the data catalog
+*/
+    
+// //Step 1: Import time to medical facility data and select the accessibility variable (band) 
+// var time = ee.Image('Oxford/MAP/accessibility_to_healthcare_2019')
+//           .select('accessibility');
+
+// //Step 2: Map the dataset
+// Map.addLayer(time, {
+//   min: 0.0,
+//   max: 3000,
+//   palette: ['black','cyan', 'green', 'yellow', 'red'],
+// }, 'Travel Time to Healthcare');
+
+// //Step 2: Import population density
+// var popD = ee.Image('CIESIN/GPWv411/GPW_Population_Density/gpw_v4_population_density_rev11_2020_30_sec');
+
+// //Step 3: Map population density
+// Map.addLayer(popD, {
+//   min: 0.0,
+//   max: 3000,
+//   gamma: 4.0,
+// }, 'Population Density');
+
+// //Step 4: Identify pixels that are greater than 60 minutes travel time from a healthcare facility and map
+// var HC_time60 = time.gt(60).selfMask();
+
+// Map.addLayer(HC_time60, {palette: 'yellow'}, 'Farther than 60 Minutes');
+
+// //Step 5: Further restrict to locations (pixels) that have a population density measure greater than 100 and map
+// var time60_highden = HC_time60.updateMask(popD.gte(100));
+
+// Map.addLayer(time60_highden, {palette: 'red'}, 'Farther than 60 Minutes and Populated');
+
+/* ---------------------------------------------------------------------------------
+#######################  EXTRA EXPLORATION OVER LUNCH :)  #########################
+----------------------------------------------------------------------------------*/
+
+// /* ---------------------------------------------------------------------------------
+// ########################  Prompt 4 ################################
+// ----------------------------------------------------------------------------------*/
+/*  You want to examine the relationships between population life expentancy, GDP and 
+    environment impact. What datasets are available to estimate the level of human modification to
+    the natural environment? There are many potential options here so use your time left to explore!*/
+    
+// //The Human Modification dataset provide a cumulative measure of human modification of terrestrial lands 
+// //globally at 1 square-kilometer resolution. Map and explore. 
+// var dataset = ee.ImageCollection('CSP/HM/GlobalHumanModification')
+
+// var visualization = {
+//   bands: ['gHM'],
+//   min: 0.0,
+//   max: 1.0,
+//   palette: ['0c0c0c', '071aff', 'ff0000', 'ffbd03', 'fbff05', 'fffdfd']
+// };
+
+// Map.addLayer(dataset, visualization, 'Human modification');
+
+// //Lights at night data are another measure of human modification and local economic activity. Map and explore.
+// var night_lights = ee.ImageCollection('NOAA/VIIRS/DNB/MONTHLY_V1/VCMCFG')
+//                   .filterDate('2017-01-01', '2020-01-01');
+  
+// var night_lights_mean= night_lights.select('avg_rad').mean();
+
+// //var night_lights_mean = night_lights_avg_rad.mean();
+           
+// var nighttimeVis = {
+//   min: 0.0,
+//   max: 60,
+//   palette: ['0c0c0c', '071aff', 'ff0000', 'ffbd03', 'fbff05', 'fffdfd']
+// };
+
+// Map.addLayer(night_lights_mean, nighttimeVis, 'Nighttime');
+
+// //There are several data sources that examine natural area change. 
+// //One example is the monitoring of forest clearing (https://www.globalforestwatch.org/) . 
+// var dataset = ee.ImageCollection('WRI/GFW/FORMA/raw_output_ndvi')
+//                   .filter(ee.Filter.date('2018-01-01', '2018-01-02'));
+// var percentOfClearing = dataset.select('clearing').sum();
+
+// var clearingvisParams = {
+//   min: 0,
+//   max: 15,
+//   palette: ['blue', 'green', 'red']
+// };
+
+// Map.setCenter(-51.90, -5.63, 5);
+// Map.addLayer(
+//     percentOfClearing, clearingvisParams, 'Percent of clearing in the last 365 days');
+
+
