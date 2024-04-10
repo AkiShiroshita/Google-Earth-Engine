@@ -1,0 +1,160 @@
+
+/* Lab 2 - Urbanization and land use change
+  Part 2- Local climate zone classification on GEE
+
+  Arthor: Chunxue Xu; Robert R. Kennedy @eMapR Lab | Oregon State University
+  The success of LCZ classification depends on many factors such as image quality, label quality, model configuration, etc.
+  Script is an example of image classification in GEE. It may be re-used as needed with no guarantee of effectiveness.
+*/
+
+
+/* ---------------------------------------------------------------------------------
+#################### Block 1 Load study area and LS8R imagery ###################
+----------------------------------------------------------------------------------*/
+
+/** Code Source: https://developers.google.com/earth-engine/datasets/catalog/LANDSAT_LC08_C01_T1_SR
+* Function to mask clouds based on the pixel_qa band of Landsat 8 SR data.
+* @param {ee.Image} image input Landsat 8 SR image
+* @return {ee.Image} cloudmasked Landsat 8 image
+* In the Landsat 8 satellite imagery data, there's a special band called 'pixel_qa'. You can think of
+* it as a set of labels or tags for each pixel in the image that provides some quality information. 
+* For example, it tells you whether a pixel is clear, whether it's a cloud, whether it's a cloud's 
+* shadow, whether it's water, etc. But instead of writing these labels out in text, they're encoded 
+* into binary (ones and zeros), because it's much more efficient for a computer to process. For 
+* instance, if a pixel is clear, its corresponding 'pixel_qa' value might look like '00001000', 
+* and if it's a cloud, it might look like '00010000'.
+*/
+
+// function maskL8sr(image) {
+//   // Bits 3 and 5 are cloud shadow and cloud, respectively.
+//   var cloudShadowBitMask = (1 << 3);
+//   var cloudsBitMask = (1 << 5);
+//   // Get the pixel QA band.
+//   var qa = image.select('pixel_qa');
+//   // Both flags should be set to zero, indicating clear conditions.
+//   var mask = qa.bitwiseAnd(cloudShadowBitMask).eq(0)
+//                 .and(qa.bitwiseAnd(cloudsBitMask).eq(0));
+//   return image.updateMask(mask);
+// }
+
+
+// // Load the mapping area (New York City-Newark-Jersey City, NY-NJ-PA MSA)
+// var studyarea = NY_NJ_PA;
+// print(studyarea);
+// Map.centerObject(studyarea, 9);
+// Map.addLayer(studyarea);
+
+
+// // Define bands of interest
+// var feature_bands = ['B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'B7', 'B10', 'B11'];
+
+/* Import landsat image collection, restrice imagecollection to other stud area, select date range
+of interest, apply cloud mask, calculate median values across all images, select bands of interest
+and clip final image to study area */
+
+// var l8imagery = ee.ImageCollection('LANDSAT/LC08/C01/T1_SR')
+//                             .filterBounds(studyarea)
+//                             .filterDate('2018-06-15', '2018-09-15')
+//                             .map(maskL8sr)  
+//                             .median() 
+//                             .select(feature_bands)
+//                             .clip(studyarea);
+
+// // Load the composite image to the map
+// var visParams = {
+//   bands: ['B4', 'B3', 'B2'],
+//   min: 0,
+//   max: 3000,
+//   gamma: 1.4,
+// };
+// Map.addLayer(l8imagery,visParams,'Landsat8 composite');
+
+
+
+/* ---------------------------------------------------------------------------------
+##########################Block 2 Load labeled samples for LCZ modeling ############
+ ----------------------------------------------------------------------------------*/
+
+// var samples = ee.FeatureCollection(lczsample).filter(ee.Filter.neq('typeid', 9));
+
+// // Define the LCZ label code and palette for visualization purposes
+
+// // There is no LCZ7 and LCZC_Bush, scrub in the mapping area.  LCZ9 (sparsly build is excluded as well.
+// var LCZ_codes  = [ 1, 2, 3, 4, 5, 6, 8, 10, 11, 12, 14, 15, 16, 17];
+
+// // Define color scheme to visualize LCZ types
+// var LCZ_palette = [
+//   '910613',    // LCZ1_Compact highrise
+//   'D9081C',    // LCZ2_Compact midrise 
+//   'FF0A22',    // LCZ3_Compact lowrise
+//   'C54F1E',    // LCZ4_Open highrise
+//   'FF6628',    // LCZ5_Open midrise
+//   'FF985E',    // LCZ6_Open lowrise
+//   'BBBBBB',    // LCZ8_Large lowrise
+//   '565656',    // LCZ10_Heavy Industry	
+//   '006A18',    // LCZA_Dense trees
+//   '00A926',    // LCZB_Scattered trees	
+//   'B5DA7F',    // LCZD_Low plants
+//   '000000',    // LCZE_Bare rock or paved
+//   'FCF7B1',    // LCZF_Bare soil or sand
+//   '656BFA'];   // LCZG_Water
+
+
+// // Define the function to add the color code as a feature property 
+// function paintpoint(feature) {
+//   var index = ee.List(LCZ_codes).indexOf(feature.get('typeid')); 
+//   return feature.set({color: {color: ee.List(LCZ_palette).get(index)}});
+// }
+
+// var samples = samples.map(paintpoint);
+// print(samples)
+
+// // Visualize the sampled points for LCZ mapping as a map layer
+// Map.addLayer(samples.style({styleProperty: "color"}),{}, 'Sample Set');
+
+
+
+/* ---------------------------------------------------------------------------------
+################ Block 3 Splitting samples to training and testing set #############
+----------------------------------------------------------------------------------*/
+
+// //Sample training points from the L8 composite imagery and do random split to get training and testing sets
+// var sampleSet = l8imagery.sampleRegions({
+//                             collection: samples, 
+//                             properties: ['typeid'],  
+//                             scale: 100
+//                           })
+//                           .randomColumn('index', 350);
+// print(sampleSet);
+// var trainingSet = sampleSet.filterMetadata('index', 'less_than', 0.7); //70% labeled samples for training;
+// var testingSet = sampleSet.filterMetadata('index', 'greater_than', 0.7); //30% labeled samples for testing;
+// print(trainingSet);
+// print(testingSet);
+
+
+
+/* ---------------------------------------------------------------------------------
+################ Block 4 Build up a RF classifier for LCZ mapping ##################
+----------------------------------------------------------------------------------*/
+
+// // Create a random forest classfier with 200 trees and get model training on the trainSet
+// var RF_LCZ = ee.Classifier.smileRandomForest(200)    // You can specify how many trees;
+//                           .train(trainingSet, 'typeid', feature_bands);
+
+// // Get the classification accuracy on the testingSet
+// var testAccuracy = testingSet.classify(RF_LCZ).errorMatrix('typeid', 'classification');
+// print ('Confusion matrix',testAccuracy);
+// print ('Overall accuracy: ', testAccuracy.accuracy());
+
+// // Classify the map and visualize it
+// var LCZmap = l8imagery.classify(RF_LCZ)
+//                       .reproject({
+//                           'crs':l8imagery.projection().crs(),
+//                           'scale': 100}); //resample the map resolution to 100 m 
+                               
+// Map.addLayer(LCZmap, {min:1, max:17, palette: LCZ_palette}, 'LCZ Map') ;
+  
+
+
+
+
