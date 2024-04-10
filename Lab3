@@ -1,0 +1,152 @@
+
+/* Lab 2 - Urbanization and Land Use Change
+   Part 1- Urban change analysis on GEE
+   Date: June 22
+   
+   Citation: Yang, L., Jin, S., et al. A New Generation of the United States National Land Cover Database:
+             Requirements, Research Priorities, Design, and Implementation Strategies, p. 108–123.
+*/
+
+/* ---------------------------------------------------------------------------------
+######################## Block 1 Load NLCD Products ################################
+----------------------------------------------------------------------------------*/
+// // Start from page: https://developers.google.com/earth-engine/datasets/catalog/USGS_NLCD_RELEASES_2016_REL
+
+// // Import the NLCD collection.
+// var dataset = ee.ImageCollection('USGS/NLCD_RELEASES/2016_REL');
+
+// print(dataset);
+
+// // The collection contains images for multiple years and regions in the USA.
+// print(dataset.aggregate_array('system:index'));
+
+// // Filter the collection to the 2016 product.
+// var nlcd2016 = dataset.filter(ee.Filter.eq('system:index', '2016')).first();
+
+// // Each product has multiple bands for describing aspects of land cover.
+// print('Bands:', nlcd2016.bandNames());
+
+// // Select the land cover band.
+// var landcover = nlcd2016.select('landcover');
+
+// // Display land cover on the map.
+// Map.setCenter(-95, 38, 5);
+// Map.addLayer(landcover, null, 'Landcover');
+
+
+/* ---------------------------------------------------------------------------------
+#######################  Block 2 Extract impervious layers #########################
+----------------------------------------------------------------------------------*/
+
+// //Step 1: Filter the collection to get the 2001, 2006, 2011, and 2016 product.
+// //Step 2: Get impervious layer for the year 2001; 2006; 2011; 2016
+// //Step 3: Load the impervious layers to the Map
+
+// // Step 1: Filter the collection to get the 2001, 2006, 2011, and 2016 product.
+// // Task #1: Get the 2006, 2011, and 2016 product.
+// var nlcd2001 = nlcd.filter(ee.Filter.eq('system:index', '2001')).first();
+// print(nlcd2001);
+// var nlcd2006 = nlcd.filter(ee.Filter.eq('system:index', '2006')).first();
+// var nlcd2011 = nlcd.filter(ee.Filter.eq('system:index', '2011')).first();
+// var nlcd2016 = nlcd.filter(ee.Filter.eq('system:index', '2016')).first();
+
+// // Step 2: Get impervious layer for the year 2001; 2006; 2011; 2016
+// // Task #2: Get impervious layer for the year 2006; 2011; 2016
+// var impervious2001 = nlcd2001.select('impervious');
+// var impervious2006 = nlcd2006.select('impervious');
+// var impervious2011 = nlcd2011.select('impervious');
+// var impervious2016 = nlcd2016.select('impervious');
+
+// // Step 3: Add the impervious layer for the year 2001 and visualize it
+// // Task #3: Load impervious2001 to the Map
+// // Function: Map.addLayer
+// // Hint: visParams --> var urbanViz = {min: 0, max: 100, palette: ['white', 'red']};
+// var urbanViz = {min: 0, max: 100, palette: ['white', 'red']};
+// Map.addLayer(impervious2001, urbanViz, 'impervious2001');
+
+// // Task #4:: Add the impervious layer for the year 2016 and use the inspector 
+// //         to check the change/difference between 2001 and 2016
+// Map.addLayer(impervious2016, urbanViz, 'impervious2016');
+
+
+/* ---------------------------------------------------------------------------------
+#################Block 3 Caculate the impervious land change across years###########
+----------------------------------------------------------------------------------*/
+
+// // Step 1: Caculate the impervious land change from 2011 to 2016;
+// var diff_2011To2016 = impervious2016.subtract(impervious2011);
+
+
+// // Step 2: Load the difference layer to the map;
+// // Hint: visParams --> var urbanchangeViz = {min: 0, max: 10, palette: ['white', 'red']};
+// var urbanchangeViz = {min: 0, max: 100, palette: ['white', 'red']};
+// Map.addLayer(diff_2011To2016, urbanchangeViz, 'change from 2011 to 2016');
+
+
+// // Task #5: Caculate the impervious land change from 2001 to 2016 and load it to the map;
+// var diff_2001To2016 = impervious2016.subtract(impervious2001);
+// Map.addLayer(diff_2001To2016, urbanchangeViz, 'change from 2001 to 2016');
+
+
+/* ---------------------------------------------------------------------------------
+##########Block 4 Exact impervious values for multiple years at census tract level###
+----------------------------------------------------------------------------------*/
+/*hint: Check the the last block of Case study 1_part 2 for reference 
+Step 1: (1)Convert the layers to a image collection; (2)then to a multi-band image. Each band is the impervious land for a year
+Step 2: Develop a function to get the mean impervious percent for a region
+Step 3: Load the NYC census tract and test the function on one census tract
+Step 4: Load the NYC census tract and use a map function to append mean impervious percent to the attribute table
+Step 5: Run a task to export the table */
+
+
+// // Step 1: (1)Convert the layers to a image collection; (2)then to a multi-band image. Each band is the impervious land for a year
+// // Functions: ee.ImageCollection.fromImages(); toBands()
+// // Task #6: Convert the impervious2001, impervious2006, impervious2011, impervious2016 and diff_2001To2016
+// //            to a image collection; Then to a multi-band image. Print both in the Console
+
+// var imglist = [impervious2001, impervious2006, impervious2011, impervious2016, diff_2001To2016];
+// var impervious_collection = ee.ImageCollection.fromImages(imglist);
+// print('Impervious imagecollection',impervious_collection);
+// var impervious_multibands = impervious_collection.toBands().rename('impervious2001', 'impervious2006', 'impervious2011', 'impervious2016', 'diff_2001To2016');
+// print('Impervious multiband',impervious_multibands);
+
+
+// // Step 2: Develop a function to get the mean impervious percent for a region
+// // Reference: https://developers.google.com/earth-engine/guides/reducers_reduce_region
+
+// function AddImpervious(feature) {
+//   var impervious_mean = impervious_multibands.reduceRegion({
+//     reducer: ee.Reducer.mean(),
+//     geometry: feature.geometry(),
+//     scale: 30,
+//     maxPixels: 1e9
+//     });
+//   return feature.set(impervious_mean);
+// }
+
+// // Step 3: Load the NYC census tract, and apply the function on the first census tract in the CT collection
+
+// Map.centerObject(NYC_CT, 10);
+// Map.addLayer(NYC_CT,null,'census tracts in New York City');
+// var oneCT = NYC_CT.filter(ee.Filter.eq('OBJECTID', 1997)).first();
+// print(oneCT);
+// var impervious_oneCT = AddImpervious(oneCT);
+// print('Assignment to 1 CT',impervious_oneCT);
+
+
+// // Step 4: Apply map function to extract the impervious land percent information and assign to each census tract function
+// // Functions: .map(); print;
+
+// var impervious_CT = NYC_CT.map(AddImpervious);
+// print(impervious_CT);
+
+// // Step 5: Run a task to export the table
+// // Functions: Export.table.toDrive()
+// Export.table.toDrive({
+//   collection: impervious_CT,
+//   description: 'impervious_CT',
+//   fileFormat: 'CSV'
+// });
+
+// Map.addLayer(impervious_CT, urbanchangeViz, 'CT Assigned Impervious Change');
+
