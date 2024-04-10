@@ -1,0 +1,205 @@
+// var NDVI_VisParams = {min: -0.8, max: 0.8, palette: ['blue', 'white', 'green']};
+// var CU = ee.Geometry.Point(-73.96,40.81); 
+
+// /* ---------------------------------------------------------------------------------
+// ##############Part 4: Get Image Collections for L5, L7, and L8  ##########################
+// ----------------------------------------------------------------------------------*/
+
+// //Get ImageCollections L8, L7, and L5, filtered by date, area of interest, and masking out clouds and shadows
+// function collectionstack(year, startDay, endDay, aoi){
+  
+//   //get Landsat 8 image collection for area of interest and a specific time period
+//   var lc8Col = ee.ImageCollection('LANDSAT/LC08/C02/T1_L2')
+//                 .filterDate(year + '-' + startDay, year + '-' + endDay)
+//                 .filterBounds(aoi)
+//                 .map(maskCloudsAndShadows);
+  
+//   //get Landsat 7 image collection for area of interest and a specific time period
+//   var le7Col  = ee.ImageCollection('LANDSAT/LE07/C02/T1_L2')
+//                 .filterDate(year +'-' + startDay, year + '-' + endDay)
+//                 .filterBounds(aoi)
+//                 .map(maskCloudsAndShadows);
+  
+//   //get Landsat 5 image collection for area of interest and a specific time period              
+//   var lt5Col  = ee.ImageCollection('LANDSAT/LT05/C02/T1_L2')
+//                 .filterDate(year +'-' + startDay, year + '-' + endDay)
+//                 .filterBounds(aoi)
+//                 .map(maskCloudsAndShadows);
+
+//   //hormonize Landsat 5, 7 and 8 collection
+//   var lc8Col_harmonized = lc8Col.select(['SR_B4','SR_B5'],['SR_B3', 'SR_B4']); //select B4 and B5 and rename them as B3 and B4 for harmonization purpose
+//   var lt7Col_harmonized = le7Col.map(harmonization2OLI); // hormonize landsat 7 to oli
+//   var lt5Col_harmonized = lt5Col.map(harmonization2OLI); // hormonize landsat 5 to oli
+  
+//   var combinedCollection = lt5Col_harmonized.merge(lt7Col_harmonized).merge(lc8Col_harmonized); //combine all available landsat images
+//   return combinedCollection; //return the combined image collection
+// }
+
+// //Function to harmonize TM and ETM+ to OLI
+// //Reference: Roy et al (2016) Characterization of Landsat-7 to Landsat-8 reflective wavelength and normalized difference vegetation index continuity.Romote Sensing of Environment https://doi.org/10.1016/j.rse.2015.12.024)
+// //More reference: Landsat ETM+ to OLI Harmonization tutorial (https://developers.google.com/earth-engine/tutorials/community/landsat-etm-to-oli-harmonization)
+// function harmonization2OLI(image){
+  
+//   //define coefficients; refer to Roy et al. (2016) for the transformation function
+//   var slopes = ee.Image.constant([0.9825, 1.0073]);
+//   var itcps = ee.Image.constant([-0.0022, -0.0021]);  
+  
+//   //apply harmonization transformation, and add the time information as a image property
+//   var img = image.select(['SR_B3','SR_B4'])
+//                 .add(itcps)
+//                 .set('system:time_start', image.get('system:time_start')); 
+//   return img;
+// }
+ 
+// //Mask function for Landsat8 SR (available from https://developers.google.com/earth-engine/datasets/catalog/LANDSAT_LC08_C01_T1_SR)
+// // Step 4.2 Create a function to mask pixels with shadows and/or clouds
+// function maskCloudsAndShadows(image) {
+//   var cloudBit = (1 << 3);
+//   var cloudShadowBit = (1 << 4);
+//   var snowBit = (1 << 5);
+//   var waterBit = (1 << 7);
+  
+//   // select the Landsat 8 QA band for image analysis
+//   var qa = image.select('QA_PIXEL');
+  
+//   // which pixels in the qa band do not have a red flag for shadows or clouds?
+//   var mask = qa.bitwiseAnd(cloudBit).eq(0)
+//               .and(qa.bitwiseAnd(cloudShadowBit).eq(0))
+//               .and(qa.bitwiseAnd(waterBit).eq(0))
+//               .and(qa.bitwiseAnd(snowBit).eq(0));
+  
+//   // using the mask, screen the landsat 8 image to only select pixels free from shadows or clouds
+//   var maskedImage = image.updateMask(mask);
+  
+//   // return the image with shadows and cloud pixels removed
+//   return(maskedImage);
+// }
+
+
+// /* ---------------------------------------------------------------------------------
+// ##############Part 5: get annual NDVI composites##########################
+// ----------------------------------------------------------------------------------*/
+
+// //function to get annual NDVI composites for the study area
+// function annualcomposite(startYear, endYear, startDay, endDay, aoi){
+  
+//   var imgs = []; 
+  
+//   //create a for loop to get the yearly ndvi composite
+//   for (var year = startYear; year <= endYear; year++) {
+//     var collection = collectionstack(year, startDay, endDay, aoi); //get all available landsat images
+//     var ndvi_imgs = collection.map(ndvicalc); //calcuate ndvi and return ndvi for each image
+//     var ndvi_mean=  ndvi_imgs.mean() //get the mean ndvi composite for a specific year
+//                             .set('system:time_start', (new Date(year,8,1)).valueOf())
+//                             .set('system:index', year.toString()); //add the time stamp as a image property for multiple-year analysis
+//     imgs = imgs.concat(ndvi_mean);  //concatenate multiple year ndvi to a image collection
+//   }
+//   return ee.ImageCollection(imgs); //return multiple-year ndvi images
+// }
+
+// //function to calculate ndvi
+// function ndvicalc(image){ 
+//   var ndvi = image.normalizedDifference(['SR_B4', 'SR_B3']) 
+//                 .select([0], ['NDVI']) 
+//                 .set('system:time_start', image.get('system:time_start'));
+//   return ndvi;
+// }
+
+
+
+// /* ---------------------------------------------------------------------------------
+// ##############Part 6:: NDVI Time Series Analysis######################
+// ----------------------------------------------------------------------------------*/
+
+// //Step 1: Define the start&end year and season for NDVI time series analysis
+// var startYear = 1990; 
+// var endYear = 2020; 
+// var startDay = ['06-15'];
+// var endDay =   ['09-15']; 
+// var aoi = CU;              //Define your study area
+
+
+// //Step 2: Apply the NDVI time series function to get the annual composite
+// var NDVIresult = annualcomposite(startYear, endYear, startDay, endDay, aoi); //Call the function
+// print(NDVIresult); // Print the returned image collection to check its features
+
+
+// //Step 3: Make a chart to display the annual NDVI composite
+// var chartComp = ui.Chart.image.series({
+//   imageCollection: NDVIresult, //What is the imageCollection? It should be the returned collection from Step 2
+//   region: CU,                  //What is the location you are interested in? 
+//   scale: 30,                   //Use default pixel size (landsat 30m)
+//   xProperty: 'system:index',   
+// })
+// .setSeriesNames(['NDVI']) //set chart title, x-y axis titles, color, linewidth, etc 
+// .setOptions({
+//   title: 'Intra-annual NDVI (growth season)',
+//   colors: ['619cff'],
+//   hAxis: {title: 'Date'},
+//   vAxis: {title: 'NDVI'},
+//   lineWidth: 6
+// });
+// print(chartComp); //print the chart in the console
+
+
+// //Step 4: Load the image layer to Map using year 1990 as an example
+// var NDVI_1990 = NDVIresult.first();
+// Map.addLayer(NDVI_1990, NDVI_VisParams, 'NDVI image for 1990 summer');
+
+// //Step 5: Load the image layer for NYC to Map using year 1990 as an example
+// var mask = ee.Image.constant(1).clip(NYC).eq(1);
+// var NDVI_1990_NYC = NDVI_1990.updateMask(mask);
+// print(NDVI_1990_NYC);
+// Map.addLayer(NDVI_1990_NYC, NDVI_VisParams, 'NYC NDVI image for 1990 summer');
+
+
+
+// /* ---------------------------------------------------------------------------------
+// ##############Part 7: Assign Annual NDVI to CTs in NYC ###############
+// ----------------------------------------------------------------------------------*/
+
+// //Step 1: Convert the image collection to a multi-band image, and each band is the NDVI composite for a year
+
+// //mask the areas outside of NYC to save computing running time (without the masking function, running time will be over an hour)
+// var NDVIresult_masked = NDVIresult.map(function(img){
+//     var mask = ee.Image.constant(1).clip(NYC).eq(1); //create a mask
+//     var img_masked = img.updateMask(mask) ; //apply the mask to the image
+//     return img_masked; //return the masked image
+//   });
+// var yearlyNDVI = NDVIresult_masked.toBands(); //convert the image collection to a multi-band image
+// print(yearlyNDVI);
+
+
+// //Step 2: Develop a function to get the mean NDVI for a region
+// //Check reduceRegion function: https://developers.google.com/earth-engine/guides/reducers_reduce_region
+// function AddNDVI(feature) {
+//   var NDVI_mean = yearlyNDVI.reduceRegion({
+//     reducer: ee.Reducer.mean(), //use mean reducer to get mean value for a region
+//     geometry: feature.geometry(),
+//     scale: 30,
+//     maxPixels: 1e9
+//     });
+//   return feature.set(NDVI_mean); // append the multiple-year NDVI values extracted from the image to the attribute table as new properties
+// }
+
+// //Step 3: Load the NYC census tract and test the function on one census tract
+// var NYC_CensusTract = ee.FeatureCollection(NYC_CT);
+// print(NYC_CensusTract);
+// var NDVI_oneCT = AddNDVI(NYC_CensusTract.first()); //extract the first NYC census tract as an example to test the function
+// print(NDVI_oneCT); //test the function on one Census Tract feature
+
+// //Step 4: Load the NYC census tract and use a map function to append mean NDVI to the attribute table
+// var NDVI_CT = NYC_CensusTract.map(AddNDVI); //apply the function to all census tracts
+// print(NDVI_CT);
+
+// //Step 5: Run a task to export the table (running time should be less than 5mins; it was ~40s on our end)
+// Export.table.toDrive({
+//   collection: NDVI_CT, //export the feature collection 'NDVI_CT'
+//   description: 'Lab1_NDVI', //give the task a description
+//   fileFormat: 'CSV' //set the table format as csv
+// });
+
+
+// //Step 6: Challenge yourself
+// //Change the study period to get max NDVI composite for annual, spring, and fall during 2000 to 2020;
+// //We are working on NDVI. How to do the time-series analysis on NBR, Build-up, or other index?
