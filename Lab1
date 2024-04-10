@@ -1,0 +1,140 @@
+/* Lab 1 - Urban Green Space
+   Part 1- Load Landsat 8 imagery and derive NDVI
+   Citation: https://developers.google.com/earth-engine/tutorials 
+*/ 
+
+
+/* ---------------------------------------------------------------------------------
+##########################Part 1: Loading Landsat Imagery and Filtering by Time, Location, and Image Quality #########################
+1.1 Load Landsat 8 ImageCollection 
+1.2 Restrict L8 ImageCollection to NYC limits and filter to a specific time range
+1.3 Create a custom function to mask pixels with clouds and shadows
+1.4 Apply custom function to remove shadow and cloud pixels from filtered ImageCollection
+1.5 Visualize the masked dataset
+----------------------------------------------------------------------------------*/
+
+//Step 1.1: Load Landast 8 ImageCollection
+var L8ImageCollection = ee.ImageCollection("LANDSAT/LC08/C02/T1_L2");
+
+//Step 1.2: Restrict L8 ImageCollection to images that overlap NYC and filter from June 15th, 2019 to June 14th, 2020
+var filteredL8Collection = L8ImageCollection.filterDate('2019-06-15', '2020-06-15');
+var boundedL8Collection = filteredL8Collection.filterBounds(NYC);
+
+/*Note: Landsat 8 includes bitwise QA filters for many atmospheric conditions that reduce image quality
+   Bit 0: Fill
+   Bit 1: Dilated Cloud
+   Bit 2: Cirrus (high confidence)
+   Bit 3: Cloud
+   Bit 4: Cloud Shadow
+   Bit 5: Snow 
+   Bit 6: Clear
+   Bit 7: Water
+   ...
+*/
+
+/* Step 1.3 Create a custom function to mask pixels with clouds and shadows
+*  Input: image (ee.Image) - and image to screen for clouds and shadows
+*  Output: image (ee.Image) - the input image with clouds and shadows removed
+*/
+function maskCloudsAndShadows(image) {
+  var cloudBit = (1 << 3);
+  var cloudShadowBit = (1 << 4);
+  var snowBit = (1 << 5);
+  var waterBit = (1 << 7);
+  
+  // select the Landsat 8 QA band for image analysis
+  var qa = image.select('QA_PIXEL');
+  
+   // which pixels in the qa band do not have a red flag for shadows or clouds?
+  var mask = qa.bitwiseAnd(cloudBit).eq(0)
+               .and(qa.bitwiseAnd(cloudShadowBit).eq(0))
+               .and(qa.bitwiseAnd(waterBit).eq(0))
+               .and(qa.bitwiseAnd(snowBit).eq(0));
+  
+  // using the mask, screen the landsat 8 image to only select pixels free from shadows or clouds
+  var maskedImage = image.updateMask(mask);
+  
+  // return the image with shadows and cloud pixels removed
+  return(maskedImage);
+}
+
+
+
+// Step 1.4. Apply the custom function written in step 3 to filter out clouds and pixels from the ImageCollection
+var maskedCollection = boundedL8Collection.map(maskCloudsAndShadows)
+
+// Step 1.5 Visualize the masked dataset
+
+// Bands SR_B4, SR_B3, and SR_B2 are the r,g,b bands for Landsat 8
+var L8VisParams = {
+  bands: ['SR_B4', 'SR_B3', 'SR_B2'],
+  min: 0,
+  max: 25000,
+  gamma: 1.4,
+};
+
+// Add the masked L8 ImageCollection to the map and zoom in to the CU campus
+Map.addLayer(maskedCollection, L8VisParams);
+Map.setCenter(-73.96985302808139, 40.805894364535995, 13);
+
+
+/* ---------------------------------------------------------------------------------
+####################### Part 2 Caculate NDVI  ################
+Note: Here's a GEE NDVI tutorial: https://developers.google.com/earth-engine/tutorials/tutorial_api_06
+2.1 Create a custom function to calculate NDVI for a Landast 8 Image
+2.2 Modify function from 2.1 to also return time for the Image
+----------------------------------------------------------------------------------*/
+
+/* Step 2.1 Create a custom function to calculate NDVI for a Landsat 8 Image
+   Input: image (ee.Image) - the image to calculate NDVI from
+   Output: NDVI (ee.Image) - NDVI estimates derived from the input image
+*/
+var calcNDVI = function(image) {
+  var NDVI = image.normalizedDifference(['SR_B5', 'SR_B4']);
+  var NDVI_Named = NDVI.rename('NDVI');
+  return NDVI_Named;
+};
+
+print(maskedCollection)
+var NDVI_Collection = maskedCollection.map(calcNDVI);
+print(NDVI_Collection.first());
+
+var NDVI_VisParams = {min: -0.8, max: 0.8, palette: ['blue', 'white', 'green']};
+Map.addLayer(NDVI_Collection, NDVI_VisParams, 'NDVI image');
+
+
+
+// Step 2.2 Modify the function from 2.1 to attach date to each NDVI image
+var calcNDVI = function(image) {
+  var NDVI = image.normalizedDifference(['SR_B5', 'SR_B4']);
+  var NDVI_Named = NDVI.rename('NDVI');
+  var NDVI_WithTime = NDVI_Named.set('system:time_start', image.get('system:time_start'));
+  return NDVI_WithTime;
+};
+
+var NDVI_CollectionWithTime = maskedCollection.map(calcNDVI);
+print(NDVI_CollectionWithTime.first());
+
+
+/* ---------------------------------------------------------------------------------
+####################### Part 3: BONUS Activity: Visualize NDVI Time Series  ################
+Note: Herre's a GEE tutorial on how to create a chart: https://developers.google.com/earth-engine/tutorials/tutorial_api_07
+3.1 Create a Point representing the center of CU campus
+3.2 Create a time series chart using the NDVI ImageCollection with dates attached to images
+3.3 Print the chart in the console
+----------------------------------------------------------------------------------*/
+
+// Step 3.1 Create a Feature Point representing the center of CU campus
+var CU = ee.Geometry.Point(-73.96,40.81);
+Map.addLayer(CU,"","CU");
+
+// Step 3.2 Create a time series chart using the NDVI ImageCollection with dates attached to images
+var chart = ui.Chart.image.series({
+  imageCollection: NDVI_CollectionWithTime.select('NDVI'),
+  region: CU,
+  reducer: ee.Reducer.first(),
+  scale: 30
+}).setOptions({title: 'NDVI over time'});
+
+// Step 3.3 Display the chart in the console.
+print(chart);
